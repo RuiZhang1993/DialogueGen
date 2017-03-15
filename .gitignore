@@ -3,3 +3,6 @@
 */__init__.py
 *.pyc
 MyPoet_unused/*
+Encoder_Decoder/models/*
+Encoder_Decoder/dict/*
+Encoder_Decoder/data/*

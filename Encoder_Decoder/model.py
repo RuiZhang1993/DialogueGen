@@ -1,9 +1,12 @@
+# -*- coding:utf-8 -*-
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, AttentionCellWrapper
 import utils
+from math import ceil
+from numpy import random
 
 class Config():
-    def __init__(self):
+    def __init__(self, dictionary_path="./dict/dict_en.voc"):
 
         self.is_training = False
         self.is_sample = False
@@ -15,24 +18,32 @@ class Config():
 
         self.load_path = "./models/"
 
+        self.corpus_path = "./data/test_data_en.txt"
+
         self.embedding_size = 128
         self.encoder_hidden_units = 128
         self.decoder_hidden_units = 128
 
-        self.batch_size = 5
+        self.batch_size = 2
+        self.batch_epoch = 100
 
         self.is_attention = False
         self.attn_length = 128
 
         self.decode_length = 20
 
-        self.vocab_size = 8000
-        self.idx_start = -1
-        self.idx_eos = -1
-        self.idx_pad = -1
-        self.idx_unk = -1
-
         self.cell_type = GRUCell
+
+        if "_en" in dictionary_path:
+            self.vocab_to_index, self.index_to_vocab = utils.load_vocab_dict_en(dictionary_path)
+            self.vocab_size = len(self.vocab_to_index)
+            self.idx_start = self.vocab_to_index['<START>']
+            self.idx_eos = self.vocab_to_index['<EOS>']
+            self.idx_pad = self.vocab_to_index['<PAD>']
+            self.idx_unk = self.vocab_to_index['<UNK>']
+        else:
+            raise NotImplementedError('Multi-languages support not implemented yet.')
+
 
 class Model(object):
 
@@ -104,6 +115,7 @@ class Model(object):
             self.b_decoder = tf.Variable(tf.zeros([config_.vocab_size], dtype=tf.float32))
 
             self.decoder_length, _ = tf.unstack(tf.shape(self.decoder_targets))
+            self.decoder_length = self.decoder_length + 0
 
             def decoder_loop_fn_init():
                 initial_element_finished = (0 >= self.decoder_length)
@@ -166,50 +178,51 @@ class Model(object):
         self.sess.run(tf.global_variables_initializer())
 
     def train(self):
-        vocab_to_idx, idx_to_vocab = utils.load_vocab_dict_en("./dict")
-        data = utils.load_data_en("./data/test_data_en.txt", vocab_to_idx)
-        cpairs = [([i for i in data[l]],[t for t in data[l+1]]) for l in range(len(data) - 1)]
-
-        print data
-        print cpairs
-
-        def next_feed():
-            encoder_inputs_, encoder_inputs_len_ = utils.batch_op([p[0] for p in cpairs], vocab_to_idx['<PAD>'])
-            decoder_targets_, _ = utils.batch_op([p[1] for p in cpairs], vocab_to_idx['<PAD>'])
-
-            return {
-                self.encoder_inputs: encoder_inputs_,
-                self.encoder_inputs_length: encoder_inputs_len_,
-                self.decoder_targets: decoder_targets_
-            }
-
+        self.data, batches = self.__load_data()
         loss_track = []
+        for batch in range(self.config.batch_epoch):
+            random.shuffle(self.data)
+            for index in range(batches):
+                fd = self.__next_feed(index)
+                _, l = self.sess.run([self.train_op, self.loss], fd)
+                loss_track.append(l)
 
-        for b in range(100):
-            fd = next_feed()
-            _, l = self.sess.run([self.train_op, self.loss], fd)
-            loss_track.append(l)
+            if batch == 0 or batch % self.config.save_step == 0:
+                self.__print_comparation(fd, batch)
 
-            if b == 0 or b % self.config.save_step == 0:
-                print('batch {}'.format(b))
-                print(' minibatch loss: {}'.format(loss_track[-1]))
-                predict_ = self.sess.run(self.prediction, fd)
-                for i, (inp, pred) in enumerate(zip(fd[self.encoder_inputs].T, predict_.T)):
-                    print('  sample {}'.format(i+1))
-                    print('   target     > {}'.format([idx_to_vocab[w] for w in inp]))
-                    print('   prediction > {}'.format([idx_to_vocab[w] for w in pred]))
-                    if i >= 2:
-                        break
+    def __load_data(self):
+        data = utils.load_data_en(self.config.corpus_path, self.config.vocab_to_index)
+        data = [([i for i in data[l]],[t for t in data[l+1]]) for l in range(len(data) - 1)]
+        batches = int(ceil(float(len(data) // self.config.batch_size)))
+        return data, batches
+
+    def __next_feed(self, index):
+        idx_pad = self.config.vocab_to_index['<PAD>']
+
+        start_ = index * self.config.batch_size
+        end_ = (index+1) * self.config.batch_size
+
+        encoder_inputs_, encoder_inputs_len_ = utils.batch_op([p[0] for p in self.data[start_:end_]], idx_pad)
+        decoder_targets_, _ = utils.batch_op([p[1] for p in self.data[start_:end_]], idx_pad)
+        return {
+            self.encoder_inputs: encoder_inputs_,
+            self.encoder_inputs_length: encoder_inputs_len_,
+            self.decoder_targets: decoder_targets_
+        }
+
+    def __print_comparation(self, feed_dict, batch):
+        idx2voc = self.config.index_to_vocab
+        print('batch {}'.format(batch))
+        print(' minibatch loss: {}'.format(self.sess.run(self.loss, feed_dict)))
+        predict_ = self.sess.run(self.prediction, feed_dict)
+        for i, (inp, pred) in enumerate(zip(feed_dict[self.encoder_inputs].T, predict_.T)):
+            print('  sample {}'.format(i + 1))
+            print('   target     > {}'.format([idx2voc[w] for w in inp]))
+            print('   prediction > {}'.format([idx2voc[w] for w in pred]))
+            if i >= 2:
+                break
 
 config = Config()
-vocab_to_idx, idx_to_vocab = utils.load_vocab_dict_en("./dict")
-
-# ----- Parameters Initialization -----
-config.vocab_size = len(vocab_to_idx)
-config.idx_start = vocab_to_idx['<START>']
-config.idx_eos = vocab_to_idx['<EOS>']
-config.idx_pad = vocab_to_idx['<PAD>']
-config.idx_unk = vocab_to_idx['<UNK>']
 
 model = Model(config)
 model.train()
