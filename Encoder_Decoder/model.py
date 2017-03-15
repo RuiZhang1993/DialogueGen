@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, AttentionCellWrapper
+import utils
 
 class Config():
     def __init__(self):
@@ -10,7 +11,7 @@ class Config():
 
         self.save_path = "./models/"
         self.save_file = "dialogue-model"
-        self.save_step = 100
+        self.save_step = 20
 
         self.load_path = "./models/"
 
@@ -18,7 +19,7 @@ class Config():
         self.encoder_hidden_units = 128
         self.decoder_hidden_units = 128
 
-        self.batch_size = 256
+        self.batch_size = 5
 
         self.is_attention = False
         self.attn_length = 128
@@ -160,18 +161,55 @@ class Model(object):
             logits=self.decoder_logits)
 
         self.loss = tf.reduce_mean(self.stepwise_cross_entropy)
-        self.train_op = tf.train.AdamOptimizer(self.loss)
+        self.train_op = tf.train.AdamOptimizer().minimize(self.loss)
 
         self.sess.run(tf.global_variables_initializer())
 
     def train(self):
-        pass
+        vocab_to_idx, idx_to_vocab = utils.load_vocab_dict_en("./dict")
+        data = utils.load_data_en("./data/test_data_en.txt", vocab_to_idx)
+        cpairs = [([i for i in data[l]],[t for t in data[l+1]]) for l in range(len(data) - 1)]
+
+        print data
+        print cpairs
+
+        def next_feed():
+            encoder_inputs_, encoder_inputs_len_ = utils.batch_op([p[0] for p in cpairs], vocab_to_idx['<PAD>'])
+            decoder_targets_, _ = utils.batch_op([p[1] for p in cpairs], vocab_to_idx['<PAD>'])
+
+            return {
+                self.encoder_inputs: encoder_inputs_,
+                self.encoder_inputs_length: encoder_inputs_len_,
+                self.decoder_targets: decoder_targets_
+            }
+
+        loss_track = []
+
+        for b in range(100):
+            fd = next_feed()
+            _, l = self.sess.run([self.train_op, self.loss], fd)
+            loss_track.append(l)
+
+            if b == 0 or b % self.config.save_step == 0:
+                print('batch {}'.format(b))
+                print(' minibatch loss: {}'.format(loss_track[-1]))
+                predict_ = self.sess.run(self.prediction, fd)
+                for i, (inp, pred) in enumerate(zip(fd[self.encoder_inputs].T, predict_.T)):
+                    print('  sample {}'.format(i+1))
+                    print('   target     > {}'.format([idx_to_vocab[w] for w in inp]))
+                    print('   prediction > {}'.format([idx_to_vocab[w] for w in pred]))
+                    if i >= 2:
+                        break
 
 config = Config()
+vocab_to_idx, idx_to_vocab = utils.load_vocab_dict_en("./dict")
+
 # ----- Parameters Initialization -----
-# config.vocab_size =
-# config.idx_start =
-# config.idx_eos =
-# config.idx_pad =
-# config.idx_unk =
+config.vocab_size = len(vocab_to_idx)
+config.idx_start = vocab_to_idx['<START>']
+config.idx_eos = vocab_to_idx['<EOS>']
+config.idx_pad = vocab_to_idx['<PAD>']
+config.idx_unk = vocab_to_idx['<UNK>']
+
 model = Model(config)
+model.train()
