@@ -60,8 +60,7 @@ class Model(object):
             self.embeddings = tf.Variable(
                 tf.random_uniform([self.config.vocab_size, config_.embedding_size],
                                   -1.0, 1.0),
-                dtype=tf.float32
-            )
+                dtype=tf.float32)
 
         self.start_slice = tf.ones([config_.batch_size], dtype=tf.int32, name='START') * config_.idx_start
         self.start_embed = tf.nn.embedding_lookup(self.embeddings, self.start_slice)
@@ -99,8 +98,7 @@ class Model(object):
             self.W_decoder = tf.Variable(
                 tf.random_uniform([config_.decoder_hidden_units, config_.vocab_size],
                                   -1.0, 1.0),
-                dtype=tf.float32
-            )
+                dtype=tf.float32)
 
             self.b_decoder = tf.Variable(tf.zeros([config_.vocab_size], dtype=tf.float32))
 
@@ -152,20 +150,14 @@ class Model(object):
 
             decoder_outputs_flat = tf.reshape(self.decoder_outputs, (-1, decoder_dim))
             decoder_logits_flat = tf.add(tf.matmul(decoder_outputs_flat, self.W_decoder), self.b_decoder)
-            self.decoder_logits = tf.reshape(
-                decoder_logits_flat,
-                (
-                    decoder_max_steps,
-                    decoder_batch_size,
-                    config_.vocab_size
-                ))
+            self.decoder_logits = tf.reshape(decoder_logits_flat,
+                (decoder_max_steps, decoder_batch_size, config_.vocab_size))
 
         self.prediction = tf.argmax(self.decoder_logits, 2)
 
         self.stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
             labels=tf.one_hot(self.decoder_targets, depth=config_.vocab_size, dtype=tf.float32),
-            logits=self.decoder_logits
-        )
+            logits=self.decoder_logits)
 
         self.loss = tf.reduce_mean(self.stepwise_cross_entropy)
         self.train_op = tf.train.AdamOptimizer(self.loss)
