@@ -1,4 +1,4 @@
-# -*- coding:utf-8 -*-
+# -*- coding: utf-8 -*-
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, AttentionCellWrapper
 import utils
@@ -12,11 +12,11 @@ class Config():
         self.is_sample = False
         self.is_search = False
 
-        self.save_path = "./models/"
-        self.save_file = "dialogue-model"
+        self.is_save = False
+        self.save_file = "./models/dialogue-model"
         self.save_step = 20
 
-        self.load_path = "./models/"
+        self.load_path = "./models/dialogue-model"
 
         self.corpus_path = "./data/test_data_en.txt"
 
@@ -176,6 +176,7 @@ class Model(object):
         self.train_op = tf.train.AdamOptimizer().minimize(self.loss)
 
         self.sess.run(tf.global_variables_initializer())
+        self.saver = tf.train.Saver()
 
     def train(self):
         self.data, batches = self.__load_data()
@@ -189,6 +190,8 @@ class Model(object):
 
             if batch == 0 or batch % self.config.save_step == 0:
                 self.__print_comparation(fd, batch)
+                if self.config.is_save:
+                    self.__save(batch)
 
     def __load_data(self):
         data = utils.load_data_en(self.config.corpus_path, self.config.vocab_to_index)
@@ -221,6 +224,13 @@ class Model(object):
             print('   prediction > {}'.format([idx2voc[w] for w in pred]))
             if i >= 2:
                 break
+
+    def __save(self, id):
+        self.saver.save(self.sess, self.config.save_file, global_step=id)
+
+    def __load(self, meta_graph):
+        new_saver = tf.train.import_meta_graph(meta_graph)
+        new_saver.restore(self.sess, tf.train.latest_checkpoint(self.config.load_path))
 
 config = Config()
 
