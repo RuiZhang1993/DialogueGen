@@ -27,9 +27,6 @@ class Config():
         self.batch_size = 2
         self.batch_epoch = 100
 
-        self.is_attention = False
-        self.attn_length = 128
-
         self.decode_length = 20
 
         self.cell_type = GRUCell
@@ -89,11 +86,6 @@ class Model(object):
 
             self.encoder_cell = cell_(num_units=config_.encoder_hidden_units)
 
-            if config_.is_attention:
-                self.encoder_cell = AttentionCellWrapper(self.encoder_cell,
-                                                         attn_length=config_.attn_length,
-                                                         state_is_tuple=True)
-
             self.encoder_outputs,self.encoder_final_state = tf.nn.dynamic_rnn(cell=self.encoder_cell,
                                                                               inputs=self.encoder_inputs_embed,
                                                                               dtype=tf.float32,
@@ -103,10 +95,6 @@ class Model(object):
 
             self.decoder_cell = cell_(num_units=config_.decoder_hidden_units)
 
-            if config_.is_attention:
-                self.decoder_cell = AttentionCellWrapper(self.decoder_cell,
-                                                         attn_length=config_.attn_length,
-                                                         state_is_tuple=True)
             self.W_decoder = tf.Variable(
                 tf.random_uniform([config_.decoder_hidden_units, config_.vocab_size],
                                   -1.0, 1.0),
