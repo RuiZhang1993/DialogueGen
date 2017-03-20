@@ -119,7 +119,6 @@ class Model(object):
 
             with tf.variable_scope('attention'):
 
-
                 self.attn_W_c = tf.Variable(
                     tf.random_uniform([config_.encoder_hidden_units + config_.decoder_hidden_units,
                                        config_.decoder_hidden_units], -1.0, 1.0),
@@ -132,8 +131,6 @@ class Model(object):
                         tf.random_uniform([config_.decoder_hidden_units, config_.encoder_hidden_units],
                                           -1.0, 1.0),
                         dtype=tf.float32)
-                elif config_.attention_strategy == "concat":
-                    raise NotImplementedError("Not Implemented yet.")
                 else:
                     raise NotImplementedError("Not Implemented yet.")
 
@@ -157,7 +154,7 @@ class Model(object):
                         h_hat = tf.nn.tanh(tf.matmul(tf.concat([c, decoder_hidden_state], axis=1), self.attn_W_c))
 
                         return h_hat, scores_softmax
-                        #raise NotImplementedError("Not Implemented yet.")
+
                     elif config_.attention_strategy == "general":
                         encoder_outputs_flat = tf.reshape(self.encoder_outputs, [self.encoder_batch_size,
                                                                                  self.encoder_max_steps,
@@ -178,7 +175,7 @@ class Model(object):
 
                         return h_hat, scores_softmax
 
-                    elif config_.attention_strategy == "concat":
+                    else:
                         raise NotImplementedError("Not Implemented yet.")
 
             def decoder_loop_fn_init():
