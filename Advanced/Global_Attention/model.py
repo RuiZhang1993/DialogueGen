@@ -33,12 +33,11 @@ class Config():
 
         # ---------- Attention策略 ----------
         # 选项包括：
-        #   - location
         #   - dot
         #   - general
         #   - concat
         # -----------------------------------
-        self.attention_strategy = "general"
+        self.attention_strategy = "dot"
         self.attention_units = 128
 
         if "_en" in dictionary_path:
@@ -117,22 +116,20 @@ class Model(object):
             self.b_decoder = tf.Variable(tf.zeros([config_.vocab_size], dtype=tf.float32))
 
             self.decoder_length, _ = tf.unstack(tf.shape(self.decoder_targets))
-            #self.max_decoder_length =
 
             with tf.variable_scope('attention'):
+
 
                 self.attn_W_c = tf.Variable(
                     tf.random_uniform([config_.encoder_hidden_units + config_.decoder_hidden_units,
                                        config_.decoder_hidden_units], -1.0, 1.0),
                     dtype=tf.float32
                 )
-                if config_.attention_strategy == "location":
-                    raise NotImplementedError("Not Implemented yet.")
-                elif config_.attention_strategy == "dot":
+                if config_.attention_strategy == "dot":
                     pass
                 elif config_.attention_strategy == "general":
                     self.attn_W_a = tf.Variable(
-                        tf.random_uniform([config_.encoder_hidden_units, config_.encoder_hidden_units],
+                        tf.random_uniform([config_.decoder_hidden_units, config_.encoder_hidden_units],
                                           -1.0, 1.0),
                         dtype=tf.float32)
                 elif config_.attention_strategy == "concat":
@@ -142,20 +139,38 @@ class Model(object):
 
                 def _attention(decoder_hidden_state):
 
-                    if config_.attention_strategy == "location":
-                        raise NotImplementedError("Not Implemented yet.")
-                    elif config_.attention_strategy == "dot":
-                        raise NotImplementedError("Not Implemented yet.")
-                    elif config_.attention_strategy == "general":
-                        encoder_outputs_flat = tf.reshape(self.encoder_outputs, (self.encoder_batch_size,
+                    if config_.attention_strategy == "dot":
+                        encoder_outputs_flat = tf.reshape(self.encoder_outputs, [self.encoder_batch_size,
                                                                                  self.encoder_max_steps,
-                                                                                 self.encoder_dim))
+                                                                                 self.encoder_dim])
+                        decoder_hidden_flat = tf.reshape(decoder_hidden_state, [self.encoder_batch_size,
+                                                                                config_.encoder_hidden_units,
+                                                                                1])
 
-                        decoder_hs = tf.matmul(decoder_hidden_state, self.attn_W_a)
-                        decoder_hs_flat = tf.reshape(decoder_hs, (self.encoder_batch_size, config_.decoder_hidden_units, 1))
+                        scores_flat = tf.matmul(encoder_outputs_flat, decoder_hidden_flat)
+                        scores = tf.reshape(scores_flat, [self.encoder_max_steps,
+                                                          self.encoder_batch_size,
+                                                          1])
+                        scores_softmax = tf.nn.softmax(scores, dim=0)
+                        c = tf.reduce_sum(tf.multiply(self.encoder_outputs, scores_softmax), axis=0)
+                        c = tf.reshape(c, [self.encoder_batch_size, self.encoder_dim])
+                        h_hat = tf.nn.tanh(tf.matmul(tf.concat([c, decoder_hidden_state], axis=1), self.attn_W_c))
 
-                        scores_flat = tf.matmul(encoder_outputs_flat,decoder_hs_flat)
-                        scores = tf.reshape(scores_flat, [self.encoder_max_steps, self.encoder_batch_size, 1])
+                        return h_hat, scores_softmax
+                        #raise NotImplementedError("Not Implemented yet.")
+                    elif config_.attention_strategy == "general":
+                        encoder_outputs_flat = tf.reshape(self.encoder_outputs, [self.encoder_batch_size,
+                                                                                 self.encoder_max_steps,
+                                                                                 self.encoder_dim])
+
+                        scores_flat = tf.matmul(decoder_hidden_state, self.attn_W_a)
+                        scores_flat = tf.reshape(scores_flat, [self.encoder_batch_size,
+                                                               config_.encoder_hidden_units,
+                                                               1])
+                        scores_flat = tf.matmul(encoder_outputs_flat,scores_flat)
+                        scores = tf.reshape(scores_flat, [self.encoder_max_steps,
+                                                          self.encoder_batch_size,
+                                                          1])
                         scores_softmax = tf.nn.softmax(scores, dim=0)
                         c = tf.reduce_sum(tf.multiply(self.encoder_outputs, scores_softmax), axis=0)
                         c = tf.reshape(c, [self.encoder_batch_size, self.encoder_dim])
@@ -172,6 +187,7 @@ class Model(object):
                 initial_cell_state = self.encoder_final_state
                 initial_cell_output = None
                 initial_loop_state = None
+
                 return (initial_element_finished,
                         initial_input,
                         initial_cell_state,
@@ -192,7 +208,6 @@ class Model(object):
                 input = tf.cond(finished, lambda: self.pad_embed, get_next_input)
                 #state = previous_state
                 state, score = _attention(previous_state)
-                #self.attn_score.append(score)
                 output = previous_output
                 loop_state = None
 
@@ -244,6 +259,7 @@ class Model(object):
                 self.__print_comparation(fd, batch)
                 if self.config.is_save:
                     self.__save(batch)
+
 
     def __load_data(self):
         data = utils.load_data_en(self.config.corpus_path, self.config.vocab_to_index)
