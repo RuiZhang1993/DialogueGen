@@ -1,6 +1,7 @@
 .DS_Store
 .idea/*
 */__init__.py
+*/*/__init__.py
 *.pyc
 MyPoet_unused/*
 */models/*
